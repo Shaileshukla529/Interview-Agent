@@ -1,4 +1,4 @@
-"""AWS Bedrock handler for interview logic and report generation."""
+"""AWS Bedrock handler using the Converse API."""
 import boto3
 import json
 from .config import Config
@@ -6,120 +6,86 @@ from datetime import datetime
 import os
 
 class BedrockHandler:
-    """Handle AWS Bedrock interactions for interviewing."""
-    
     def __init__(self):
         self.client = boto3.client('bedrock-runtime', region_name='us-east-1')
-        self.model_id = "amazon.titan-text-express-v1" # Amazon Titan Express
+        self.model_id = "us.meta.llama3-1-70b-instruct-v1:0" 
         self.conversation_history = []
         self.system_prompt = ""
         
     def initialize_interview(self, resume_text: str):
+        self.system_prompt = f"""
+        You are a strict, no-nonsense Engineering Manager interviewing a candidate for a {Config.ROLE} position.
+        
+        RESUME:
+        {resume_text}
+
+        RULES:
+        1. Ask ONE question at a time.
+        2. Keep questions concise (spoken English).
+        3. Challenge vague answers.
         """
-        Initialize interview session with resume context.
-        """
-        self.system_prompt = f"""You are a senior technical interviewer for a {Config.ROLE} position.
-
-Resume Context:
-{resume_text}
-
-Interview Rules:
-1. Ask ONE question at a time
-2. Keep your response concise (under 2-3 sentences) as it will be spoken via TTS.
-3. If the candidate gives a short or inadequate answer, ask a specific follow-up question to probe deeper
-4. Do not be overly polite or say things like "That's a great answer!" - be professional and neutral
-5. Start the interview by referencing a specific project or skill from their resume
-6. Focus on technical depth, problem-solving ability, and real-world experience
-7. Ask behavioral questions about challenges they faced and how they solved them
-8. After 5 questions, the interview will end.
-
-Remember: You are evaluating this candidate rigorously. Be thoughtful and challenging in your questions."""
-
-        print("[OK] Interview session initialized (Bedrock - Titan)")
+        print("[OK] Interview initialized (Llama 3.1 70B via Converse API)")
     
-    def _invoke_model(self, messages):
-        """Invoke Bedrock model with messages (Titan Express)."""
-        # Convert messages to a single prompt string for Titan
-        prompt = self.system_prompt + "\n\n"
-        for msg in messages:
-            role = "User" if msg['role'] == 'user' else "Bot"
-            prompt += f"{role}: {msg['content']}\n"
-        prompt += "Bot:"
-
-        body = json.dumps({
-            "inputText": prompt,
-            "textGenerationConfig": {
-                "maxTokenCount": 1024,
-                "temperature": 0.7,
-                "stopSequences": ["User:"]
-            }
-        })
+    def _invoke_model(self, messages, is_report=False):
+        """Invoke using Bedrock Converse API (Auto-formats Llama 3 tokens)."""
         
-        response = self.client.invoke_model(
-            body=body,
-            modelId=self.model_id,
-            accept='application/json',
-            contentType='application/json'
-        )
-        
-        response_body = json.loads(response.get('body').read())
-        return response_body.get('results')[0].get('outputText').strip()
+        # Prepare System Prompt
+        system_prompts = []
+        if not is_report:
+            system_prompts = [{"text": self.system_prompt}]
+            
+        # Call Bedrock Converse
+        try:
+            response = self.client.converse(
+                modelId=self.model_id,
+                messages=messages,
+                system=system_prompts,
+                inferenceConfig={
+                    "maxTokens": 1024,
+                    "temperature": 0.7,
+                    "topP": 0.9
+                }
+            )
+            return response["output"]["message"]["content"][0]["text"]
+        except Exception as e:
+            print(f"Bedrock API Error: {e}")
+            return "I am having trouble connecting to the brain."
 
     def get_first_question(self) -> str:
-        """Get the first interview question."""
-        # Initial trigger
-        messages = [{"role": "user", "content": "Start the interview. Greet the candidate briefly and ask your first question based on their resume."}]
+        initial_msg = {
+            "role": "user", 
+            "content": [{"text": "Start the interview. Greet the candidate briefly and ask your first question based on their resume."}]
+        }
         
-        response_text = self._invoke_model(messages)
+        response_text = self._invoke_model([initial_msg])
         
-        # Track conversation
-        self.conversation_history.append({"role": "assistant", "content": response_text})
+        # Save BOTH the trigger and the response to history
+        self.conversation_history.append(initial_msg)
+        self.conversation_history.append({"role": "assistant", "content": [{"text": response_text}]})
         
         return response_text
     
     def get_response(self, user_answer: str) -> str:
-        """Get interviewer's response to user's answer."""
-        # Track user's answer
-        self.conversation_history.append({"role": "user", "content": user_answer})
+        # Add User Answer
+        self.conversation_history.append({"role": "user", "content": [{"text": user_answer}]})
         
-        # Prepare messages for API (convert history to format)
-        # Bedrock expects alternating user/assistant
-        # Our history is already in that format (mostly)
-        
+        # Invoke
         response_text = self._invoke_model(self.conversation_history)
         
-        # Track interviewer's response
-        self.conversation_history.append({"role": "assistant", "content": response_text})
-        
+        # Add AI Response
+        self.conversation_history.append({"role": "assistant", "content": [{"text": response_text}]})
         return response_text
     
     def generate_report(self) -> str:
-        """Generate interview evaluation report."""
-        print("\n📊 Generating interview report...")
-        
+        print("\n📊 Generating report...")
         transcript = self._format_transcript()
         
-        evaluation_prompt = f"""Analyze this interview transcript and provide a detailed evaluation.
-
-{transcript}
-
-Provide:
-1. Overall Summary (2-3 sentences about the candidate's performance)
-2. Ratings (1-10 scale):
-   - Technical Accuracy: How correct were their technical answers?
-   - Communication Skills: How clearly did they explain concepts?
-   - Problem Solving: How well did they approach problems?
-3. Strengths: List 2-3 key strengths demonstrated
-4. Areas for Improvement: List 2-3 areas where they could improve
-5. Recommendation: Hire / Maybe / No Hire with brief justification
-
-Format your response in a clear, structured text format."""
-
-        # Generate evaluation
-        messages = [{"role": "user", "content": evaluation_prompt}]
+        evaluation_prompt = f"Analyze this transcript:\n{transcript}\n\nProvide a strict 1-10 rating and hiring recommendation."
         
-        # Use common invoke method
-        evaluation = self._invoke_model(messages)
+        # New message context for the report
+        messages = [{"role": "user", "content": [{"text": evaluation_prompt}]}]
+        
+        evaluation = self._invoke_model(messages, is_report=True)
         
         # Create report content
         report_content = f"""INTERVIEW EVALUATION REPORT
@@ -155,24 +121,43 @@ End of Report
             f.write(report_content)
         
         print(f"[OK] Report saved to: {filename}")
+        
+        # Also extract and save questions to answer folder
+        self._save_questions_to_file()
+        
         return filepath
     
     def _format_transcript(self) -> str:
-        """Format conversation history."""
         lines = []
-        question_count = 0
+        for entry in self.conversation_history:
+            # Handle list-based content from Converse structure
+            text = entry['content'][0]['text']
+            role = entry['role'].upper()
+            lines.append(f"{role}: {text}")
+        return "\n".join(lines)
+    
+    def _save_questions_to_file(self):
+        """Extract interviewer questions and save to answer folder."""
+        questions = []
+        question_num = 1
         
         for entry in self.conversation_history:
-            role = entry['role'].upper()
-            content = entry['content']
-            
-            if role == "ASSISTANT":
-                question_count += 1
-                lines.append(f"\nQ{question_count}. INTERVIEWER:")
-            else:
-                lines.append("\nCANDIDATE:")
-            
-            lines.append(content)
-            lines.append("")
+            if entry['role'] == 'assistant':
+                question_text = entry['content'][0]['text'].strip()
+                questions.append(f"Q{question_num}: {question_text}\n\n")
+                question_num += 1
         
-        return "\n".join(lines)
+        # Save to answer directory
+        answer_dir = os.path.join(os.getcwd(), "answer")
+        if not os.path.exists(answer_dir):
+            os.makedirs(answer_dir)
+        
+        filename = f"questions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        filepath = os.path.join(answer_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("INTERVIEW QUESTIONS\n")
+            f.write("=" * 60 + "\n\n")
+            f.writelines(questions)
+        
+        print(f"[OK] Questions saved to: answer/{filename}")

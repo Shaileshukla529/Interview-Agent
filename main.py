@@ -4,14 +4,14 @@ Real-time AI interviewer using Sarvam AI (STT), Gemini AI (Brain), and AWS Polly
 """
 import time
 from agent_core.config import Config
-from agent_core.sarvam_handler import SarvamHandler
+from agent_core.whisper_handler import WhisperHandler
 from agent_core.bedrock_handler import BedrockHandler
 from agent_core.polly_handler import PollyHandler
 
 def main():
     """Main interview loop."""
     print("=" * 60)
-    print("🤖 HYBRID INTERVIEW AGENT (Sarvam + Bedrock + Polly)")
+    print("🤖 HYBRID INTERVIEW AGENT (Whisper + Bedrock + Polly)")
     print("=" * 60)
     
     try:
@@ -26,15 +26,15 @@ def main():
         
         # Initialize handlers
         print("Initializing handlers...")
-        sarvam = SarvamHandler()
+        whisper = WhisperHandler(model_size="base")  # Use "small" for better accuracy
         brain = BedrockHandler()
         polly = PollyHandler()
         
         # Initialize interview session
         brain.initialize_interview(resume_text)
         
-        # Start listening (Sarvam needs to open stream)
-        sarvam.start_listening()
+        # Start listening (Whisper needs to open stream)
+        whisper.start_listening()
         
         # Get first question
         print("\n" + "=" * 60)
@@ -57,7 +57,7 @@ def main():
             
             # Listen to user's answer
             print("🎤 Listening... (Speak now)")
-            user_answer = sarvam.listen_once()
+            user_answer = whisper.listen_once()
             
             if not user_answer:
                 print("⚠️  No speech detected. Please try again.")
@@ -82,7 +82,7 @@ def main():
             question_count += 1
         
         # Cleanup
-        sarvam.close()
+        whisper.close()
         
         # Generate report
         print("\n" + "=" * 60)
@@ -106,7 +106,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n👋 Interview interrupted by user")
         try:
-            sarvam.close()
+            whisper.close()
         except:
             pass
         
@@ -115,7 +115,7 @@ def main():
         import traceback
         traceback.print_exc()
         try:
-            sarvam.close()
+            whisper.close()
         except:
             pass
 

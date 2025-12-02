@@ -1,43 +1,50 @@
 import os
-import time
 import wave
 import tempfile
 import pyaudio
-import threading
-import queue
-from sarvamai import SarvamAI
-from .config import Config
+import whisper
+import torch
 
-class SarvamHandler:
-    """Handle Speech-to-Text using Sarvam AI (Record & Transcribe)."""
+class WhisperHandler:
+    """Handle Speech-to-Text using local Whisper model."""
     
-    def __init__(self):
-        api_key = os.getenv("SARVAM_API_KEY")
-        if not api_key:
-            print("Warning: SARVAM_API_KEY not found")
-            self.client = None
-        else:
-            self.client = SarvamAI(api_subscription_key=api_key)
-            
+    def __init__(self, model_size="base"):
+        """
+        Initialize Whisper model.
+        Args:
+            model_size: "tiny", "base", "small", "medium", "large"
+                       - tiny: fastest, less accurate
+                       - base: good balance (recommended)
+                       - small: better accuracy
+                       - medium/large: best accuracy, slower
+        """
+        print(f"Loading Whisper model ({model_size})...")
+        
+        # Check if CUDA is available
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {self.device}")
+        
+        # Load Whisper model
+        self.model = whisper.load_model(model_size, device=self.device)
+        print(f"[OK] Whisper {model_size} loaded on {self.device}")
+        
+        # Audio setup
         self.audio = pyaudio.PyAudio()
         self.stream = None
         self.is_listening = False
-        self.audio_queue = queue.Queue()
-        self.stop_event = threading.Event()
         
         # Audio config
         self.CHUNK = 1024
         self.FORMAT = pyaudio.paInt16
         self.CHANNELS = 1
         self.RATE = 16000
-        self.SILENCE_THRESHOLD = 500 # Amplitude
-        self.SILENCE_DURATION = 2.0 # Seconds of silence to trigger transcription
-        self.MAX_DURATION = 30.0 # Maximum recording duration in seconds
+        self.SILENCE_THRESHOLD = 500
+        self.SILENCE_DURATION = 4.0
+        self.MAX_DURATION = 60.0
 
     def start_listening(self):
         """Start recording audio."""
         self.is_listening = True
-        self.stop_event.clear()
         self.stream = self.audio.open(
             format=self.FORMAT,
             channels=self.CHANNELS,
@@ -45,12 +52,11 @@ class SarvamHandler:
             input=True,
             frames_per_buffer=self.CHUNK
         )
-        print("🎤 Listening... (Sarvam)")
+        print("🎤 Listening... (Whisper)")
 
     def stop_listening(self):
         """Stop recording."""
         self.is_listening = False
-        self.stop_event.set()
         if self.stream:
             self.stream.stop_stream()
             self.stream.close()
@@ -60,14 +66,10 @@ class SarvamHandler:
         Record until silence is detected, then transcribe.
         Returns transcribed text.
         """
-        if not self.client:
-            return "Error: Sarvam Client not initialized"
-
         frames = []
         silent_chunks = 0
         has_speech = False
         
-        # Calculate chunks for silence duration
         silence_chunks_limit = int(self.SILENCE_DURATION * self.RATE / self.CHUNK)
         
         print("Listening for speech...")
@@ -114,28 +116,22 @@ class SarvamHandler:
             wf.close()
             temp_filename = f.name
             
-        # Transcribe
-        # Transcribe
+        # Transcribe with Whisper
         try:
-            print("Transcribing with Sarvam...")
-            if not os.path.exists(temp_filename):
-                print("Error: Audio file not found")
-                return ""
-                
-            # Pass open file object to SDK
-            with open(temp_filename, "rb") as audio_file:
-                response = self.client.speech_to_text.transcribe(
-                    file=audio_file,
-                    model="saarika:v2.5", 
-                    language_code="en-IN" 
-                )
+            print("Transcribing with Whisper...")
             
-            transcript = response.transcript
-            # print(f"📝 You said: {transcript}") # Main loop prints this
+            # Transcribe using Whisper
+            result = self.model.transcribe(
+                temp_filename,
+                language="en",  # Force English
+                fp16=(self.device == "cuda")  # Use FP16 on GPU for speed
+            )
+            
+            transcript = result["text"].strip()
             return transcript
             
         except Exception as e:
-            print(f"Sarvam Transcription Error: {e}")
+            print(f"Whisper Transcription Error: {e}")
             return ""
         finally:
             try:
