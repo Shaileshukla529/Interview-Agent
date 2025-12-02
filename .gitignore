@@ -1,10 +1,12 @@
 # Add .env to gitignore to protect API keys
 .env
+simple_scheduler_demo.py
+requirements_scheduler.txt
+auto_git_push.py
 answer/
 resume.txt
-main_claude.py
-bedrock_handler_claude.py
 reports/
+demo_output/
 # Python
 __pycache__/
 *.py[cod]
