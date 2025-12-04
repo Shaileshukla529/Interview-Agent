@@ -6,6 +6,7 @@ auto_git_push.py
 answer/
 resume.txt
 reports/
+Notes.txt
 demo_output/
 # Python
 __pycache__/

@@ -11,20 +11,31 @@ class BedrockHandler:
         self.model_id = "us.meta.llama3-1-70b-instruct-v1:0" 
         self.conversation_history = []
         self.system_prompt = ""
+        self.notes_content = ""
+    
+    def _load_prompt_template(self, filename: str) -> str:
+        """Load a prompt template from the prompts directory."""
+        prompt_path = os.path.join(Config.PROMPTS_DIR, filename)
+        try:
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            print(f"[ERROR] Prompt file not found: {prompt_path}")
+            return ""
         
-    def initialize_interview(self, resume_text: str):
-        self.system_prompt = f"""
-        You are a strict, no-nonsense Engineering Manager interviewing a candidate for a {Config.ROLE} position.
+    def initialize_interview(self, notes_text: str):
+        """Initialize interview with notes content and prompt template."""
+        self.notes_content = notes_text
         
-        RESUME:
-        {resume_text}
-
-        RULES:
-        1. Ask ONE question at a time.
-        2. Keep questions concise (spoken English).
-        3. Challenge vague answers.
-        """
+        # Load the interview system prompt template
+        prompt_template = self._load_prompt_template("interview_system_prompt.txt")
+        
+        # Replace {notes_content} placeholder with actual notes
+        self.system_prompt = prompt_template.replace("{notes_content}", notes_text)
+        
         print("[OK] Interview initialized (Llama 3.1 70B via Converse API)")
+        print(f"[OK] Loaded study material from Notes.txt")
+        print(f"[OK] Interview focus: {Config.ROLE}")
     
     def _invoke_model(self, messages, is_report=False):
         """Invoke using Bedrock Converse API (Auto-formats Llama 3 tokens)."""
@@ -54,7 +65,7 @@ class BedrockHandler:
     def get_first_question(self) -> str:
         initial_msg = {
             "role": "user", 
-            "content": [{"text": "Start the interview. Greet the candidate briefly and ask your first question based on their resume."}]
+            "content": [{"text": "Start the interview. Greet the candidate briefly and ask your first question based on the study material."}]
         }
         
         response_text = self._invoke_model([initial_msg])
@@ -80,7 +91,9 @@ class BedrockHandler:
         print("\n📊 Generating report...")
         transcript = self._format_transcript()
         
-        evaluation_prompt = f"Analyze this transcript:\n{transcript}\n\nProvide a strict 1-10 rating and hiring recommendation."
+        # Load report evaluation prompt template
+        prompt_template = self._load_prompt_template("report_evaluation_prompt.txt")
+        evaluation_prompt = prompt_template.replace("{transcript}", transcript)
         
         # New message context for the report
         messages = [{"role": "user", "content": [{"text": evaluation_prompt}]}]
@@ -91,7 +104,7 @@ class BedrockHandler:
         report_content = f"""INTERVIEW EVALUATION REPORT
 {'=' * 60}
 Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Role: {Config.ROLE}
+Focus Area: {Config.ROLE}
 
 {'=' * 60}
 TRANSCRIPT

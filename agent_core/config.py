@@ -19,13 +19,15 @@ class Config:
     SAMPLE_RATE = 16000
     CHANNELS = 1
     
-    # Resume File
-    RESUME_PATH = "resume.txt"
+    # File Paths
+    NOTES_PATH = "Notes.txt"  # Study material for interview questions
+    PROMPTS_DIR = "prompts"   # Directory containing prompt templates
+    ROLE = "Cybersecurity Analyst"  # Updated to match Notes.txt content
     
     @classmethod
     def validate(cls):
         """Validate required configuration."""
         if not cls.SARVAM_API_KEY:
             raise ValueError("SARVAM_API_KEY not set in .env file")
-        if not os.path.exists(cls.RESUME_PATH):
-            raise ValueError(f"Resume file not found: {cls.RESUME_PATH}")
+        if not os.path.exists(cls.NOTES_PATH):
+            raise ValueError(f"Notes file not found: {cls.NOTES_PATH}")

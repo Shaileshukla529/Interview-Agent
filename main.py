@@ -11,7 +11,7 @@ from agent_core.polly_handler import PollyHandler
 def main():
     """Main interview loop."""
     print("=" * 60)
-    print("🤖 HYBRID INTERVIEW AGENT (Whisper + Bedrock + Polly)")
+    print("🤖 STUDY MATERIAL INTERVIEW AGENT (Whisper + Bedrock + Polly)")
     print("=" * 60)
     
     try:
@@ -19,19 +19,19 @@ def main():
         Config.validate()
         print("✅ Configuration validated")
         
-        # Load resume
-        with open(Config.RESUME_PATH, 'r', encoding='utf-8') as f:
-            resume_text = f.read()
-        print(f"✅ Resume loaded from {Config.RESUME_PATH}")
+        # Load study notes
+        with open(Config.NOTES_PATH, 'r', encoding='utf-8') as f:
+            notes_text = f.read()
+        print(f"✅ Study notes loaded from {Config.NOTES_PATH}")
         
         # Initialize handlers
         print("Initializing handlers...")
-        whisper = WhisperHandler(model_size="base")  # Use "small" for better accuracy
+        whisper = WhisperHandler(model_size="small")  # Use "small" for better accuracy
         brain = BedrockHandler()
         polly = PollyHandler()
         
-        # Initialize interview session
-        brain.initialize_interview(resume_text)
+        # Initialize interview session with notes
+        brain.initialize_interview(notes_text)
         
         # Start listening (Whisper needs to open stream)
         whisper.start_listening()
@@ -100,8 +100,8 @@ def main():
         print(f"\n❌ Configuration Error: {e}")
         print("\nPlease ensure:")
         print("1. You have created a .env file")
-        print("2. You have added your API keys (GEMINI, SARVAM, AWS)")
-        print("3. You have created a resume.txt file")
+        print("2. You have added your API keys (AWS)")
+        print("3. You have created a Notes.txt file with study material")
         
     except KeyboardInterrupt:
         print("\n\n👋 Interview interrupted by user")

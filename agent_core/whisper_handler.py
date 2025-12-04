@@ -8,7 +8,7 @@ import torch
 class WhisperHandler:
     """Handle Speech-to-Text using local Whisper model."""
     
-    def __init__(self, model_size="base"):
+    def __init__(self, model_size="small"):
         """
         Initialize Whisper model.
         Args:

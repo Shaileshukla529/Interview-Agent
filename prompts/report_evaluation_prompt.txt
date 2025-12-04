@@ -1,0 +1,14 @@
+Analyze this interview transcript and provide a comprehensive evaluation.
+
+TRANSCRIPT:
+{transcript}
+
+EVALUATION REQUIREMENTS:
+1. Overall Performance Rating (1-10 scale)
+2. Strengths demonstrated by the candidate
+3. Weaknesses or knowledge gaps identified
+4. Specific topics the candidate understood well
+5. Topics that need improvement
+6. Final recommendation (Hire/Not Hire/Further Review)
+
+Provide a detailed, constructive evaluation that helps assess the candidate's understanding of the studied material.
